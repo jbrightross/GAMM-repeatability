@@ -13,10 +13,31 @@ set.seed(0)
 dat <- gamSim(1,n=400,scale=2) ## simulate 4 term additive truth
 # Now add 20 level random effect `fac'...
 dat$fac <- fac <- as.factor(sample(1:20,400,replace=TRUE))
-dat$y <- dat$y + model.matrix(~fac-1)%*%rnorm(20)*.5
+dat$y <- dat$y + model.matrix(~fac-1)%*%rnorm(20)*.5 # this is how to model random effects...
 br <- gamm4(y~s(x0)+x1+s(x2),data=dat,random=~(1|fac))
+br
+summary(br$mer)
+summary(br$gam)
 
 lme4:::simulate.merMod(br$mer)
+
+# OK let's understand where varainces went
+var.total0 <- var(dat$y)
+# other bits
+var.fix <- var(predict(br$mer, re.form = NA, type = "response")) # var(predict(br$mer))
+vc <- VarCorr(br$mer)
+print(vc,comp=c("Variance"))
+var.fac <- VarCorr(br$mer)$fac[[1]]
+var.res <- attr(VarCorr(br$mer), "sc")^2
+var.total <- var.fix + var.fac + var.res
+
+var.total0 #16.04803
+var.total # 16.00582
+
+# random effects 
+#br.rr <- ranef(br$mer,condVar=TRUE)
+#br.pv <- attr(br.rr[[1]],"postVar")[1,1,]
+
 
 ## Setting all our function values for rptR, using the summer model 
 ## (without splines) as an example 
@@ -48,7 +69,27 @@ if (sum(!no_NA_vals) > 0) {
 mod <- gamm4(formula = formula, 
              data = data, 
              random = ~ (1|Sett) + (1|Individual))
-mod <- gamm(formula = formula, 
+
+# adding stuff to chec,
+mod.rr <- ranef(mod$mer,condVar=TRUE)
+summary(mod$mer)
+summary(mod$gam)
+
+V.total0 <- var(data$BCI)
+
+V.Fixed <- var(predict(mod$mer, re.form = NA))
+#V.Fixed <- var(predict(mod$mer))
+vc1 <- VarCorr(mod$mer)
+print(vc1,comp=c("Variance"))
+V.Individual <- VarCorr(mod$mer)$Individual[[1]]
+V.Sett <- VarCorr(mod$mer)$Sett[[1]]
+V.Residual <- attr(VarCorr(mod$mer), "sc")^2
+V.total <- V.Fixed + V.Individual + V.Sett + V.Residual
+
+V.total
+V.total0
+# gamm
+mod1 <- gamm(formula = formula, 
              data = data, 
              random = list(Sett = ~1, Individual = ~1))
 
