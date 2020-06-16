@@ -77,12 +77,12 @@ mod <- gamm4(formula = formula,
 Store[i,]<- get_v_icc(mod$mer)
 }
 
-# 95% CI for all the varaibles
+# 95% CI for all the variables
 # it seems pretty tight CI but I guess you have a lot of N so probably correct?
 CI <- map(Store, ~quantile(., c(0.025, 0.5, 0.975)))
 CI
 
-# to test to see wehther this is really working - you can reduce the N and see whether CI increases - use the half of the data???
+# to test to see wehther this is really working - you can reduce the N and see whether CI increases - use half of the data???
 
 # plotting - run out of time - please do!
 
