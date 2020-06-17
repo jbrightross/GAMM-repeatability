@@ -71,7 +71,7 @@ for (i in 1:Nboot) {
     model.matrix(~factor(data$Individual)-1)%*%rnorm(length(levels(factor(data$Individual))), 0, sqrt(v.individual)) + # Individual effects
     model.matrix(~factor(data$Sett)-1)%*%rnorm(length(levels(factor(data$Sett))), 0, sqrt(v.sett)) + # Sett effeccts
     rnorm(nrow(data), 0, sqrt(v.residual)) # residuals
-
+  
   #cor(fixed, data$BCI)  
 
   data$BCI <- BCI
@@ -86,6 +86,13 @@ for (i in 1:Nboot) {
     print(paste(100*i/Nboot, "percent done."))
   }
 }
+
+# alterantviely - not to run 
+# this should be the same as using the model matrix (maybe this is better?)
+BCI <- fixed + 
+rnorm(length(levels(factor(data$Individual))), 0, sqrt(v.individual))[factor(data$Individual)] + # Individual effects
+rnorm(length(levels(factor(data$Sett))), 0, sqrt(v.sett))[factor(data$Sett)] + # Sett effeccts
+rnorm(nrow(data), 0, sqrt(v.residual)) # residuals
 
 # 95% CI for all the variables
 # it seems pretty tight CI but I guess you have a lot of N so probably correct? 
