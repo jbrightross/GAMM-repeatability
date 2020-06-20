@@ -1,5 +1,5 @@
 ########################################################
-# Title: Bootstrapping repeatability and BLUPs
+# Title: Bootstrapping BLUPs
 # Name: Julius G. Bright Ross
 # Description: Setting up a bootstrapping procedure for 
 # my models that will calculate both repeatability 
