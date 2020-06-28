@@ -243,6 +243,8 @@ load("Prepared badger data_9-4-20.RData")
 sprMaxAge         <- c()
 sprTotalOffspring <- c()
 sprSexHolder      <- c()
+sprLastCapture    <- c()
+sprCohortHolder   <- c()
 
 for (i in 1:length(sprIndividuals)) {
   ind <- sprIndividuals[i]
@@ -251,11 +253,38 @@ for (i in 1:length(sprIndividuals)) {
   sprMaxAge         <- c(sprMaxAge, max(ageYearly[indPos,]))
   sprTotalOffspring <- c(sprTotalOffspring, sum(parentalMatrix[indPos,]))
   sprSexHolder      <- c(sprSexHolder, badgerSex[indPos])
+  
+  indLifeHistory <- aliveYearly[indPos,]
+  
+  lastCapturePos <- max(which(indLifeHistory == 1))
+  
+  sprLastCapture <- c(sprLastCapture, names(indLifeHistory)[lastCapturePos])
+  
+  indCohort <- cohort[indPos]
+  
+  # We don't care about cohort being firmly established for modelling total offspring, we
+  # just need to make sure we're taking out as many of them as possible:
+
+  if (is.na(indCohort)) {
+    
+    firstCapturePos <- min(which(indLifeHistory == 1))
+    
+    indCohort <- names(indLifeHistory[firstCapturePos])
+    
+  } 
+  
+  sprCohortHolder <- c(sprCohortHolder, as.character(indCohort))
+  
 }
+
+sprLastCapture  <- as.numeric(sprLastCapture)
+sprCohortHolder <- as.numeric(sprCohortHolder)
 
 sumMaxAge         <- c()
 sumTotalOffspring <- c()
 sumSexHolder      <- c()
+sumLastCapture    <- c()
+sumCohortHolder   <- c()
 
 for (i in 1:length(sumIndividuals)) {
   ind <- sumIndividuals[i]
@@ -264,11 +293,38 @@ for (i in 1:length(sumIndividuals)) {
   sumMaxAge         <- c(sumMaxAge, max(ageYearly[indPos,]))
   sumTotalOffspring <- c(sumTotalOffspring, sum(parentalMatrix[indPos,]))
   sumSexHolder      <- c(sumSexHolder, badgerSex[indPos])
+  
+  indLifeHistory <- aliveYearly[indPos,]
+  
+  lastCapturePos <- max(which(indLifeHistory == 1))
+  
+  sumLastCapture <- c(sumLastCapture, names(indLifeHistory)[lastCapturePos])
+  
+  indCohort <- cohort[indPos]
+  
+  # We don't care about cohort being firmly established for modelling total offspring, we
+  # just need to make sure we're taking out as many of them as possible:
+  
+  if (is.na(indCohort)) {
+    
+    firstCapturePos <- min(which(indLifeHistory == 1))
+    
+    indCohort <- names(indLifeHistory[firstCapturePos])
+    
+  } 
+  
+  sumCohortHolder <- c(sumCohortHolder, as.character(indCohort))
+  
 }
+
+sumLastCapture  <- as.numeric(sumLastCapture)
+sumCohortHolder <- as.numeric(sumCohortHolder)
 
 autMaxAge         <- c()
 autTotalOffspring <- c()
 autSexHolder      <- c()
+autLastCapture    <- c()
+autCohortHolder   <- c()
 
 for (i in 1:length(autIndividuals)) {
   ind <- autIndividuals[i]
@@ -277,7 +333,31 @@ for (i in 1:length(autIndividuals)) {
   autMaxAge         <- c(autMaxAge, max(ageYearly[indPos,]))
   autTotalOffspring <- c(autTotalOffspring, sum(parentalMatrix[indPos,]))
   autSexHolder      <- c(autSexHolder, badgerSex[indPos])
+  
+  indLifeHistory <- aliveYearly[indPos,]
+  
+  lastCapturePos <- max(which(indLifeHistory == 1))
+  
+  autLastCapture <- c(autLastCapture, names(indLifeHistory)[lastCapturePos])
+  
+  indCohort <- cohort[indPos]
+  
+  # We don't care about cohort being firmly established for modelling total offspring, we
+  # just need to make sure we're taking out as many of them as possible:
+  
+  if (is.na(indCohort)) {
+    
+    firstCapturePos <- min(which(indLifeHistory == 1))
+    
+    indCohort <- names(indLifeHistory[firstCapturePos])
+    
+  } 
+  
+  autCohortHolder <- c(autCohortHolder, as.character(indCohort))
 }
+
+autLastCapture  <- as.numeric(autLastCapture)
+autCohortHolder <- as.numeric(autCohortHolder)
 
 ## Building models (done separately by sex) ##
 
@@ -292,10 +372,11 @@ for (i in 1:Nboot) {
   
   # First, spring:
   
-  ageModM  <- glm(sprMaxAge[which(sprSexHolder == "Male")] ~ sprStore[i, which(sprSexHolder == "Male")] %>% 
-                    unlist() %>% unname(),
+  ageModM  <- glm(sprMaxAge[which(sprSexHolder == "Male" & sprLastCapture <= 2017)] ~ 
+                    sprStore[i, which(sprSexHolder == "Male" & sprLastCapture <= 2017)] %>% unlist() %>% unname(),
                   family = poisson)
-  ageModF  <- glm(sprMaxAge[which(sprSexHolder == "Female")] ~ sprStore[i, which(sprSexHolder == "Female")] %>% 
+  ageModF  <- glm(sprMaxAge[which(sprSexHolder == "Female" & sprLastCapture <= 2017)] ~ 
+                    sprStore[i, which(sprSexHolder == "Female" & sprLastCapture <= 2017)] %>% 
                     unlist() %>% unname(),
                   family = poisson)
   
@@ -307,10 +388,12 @@ for (i in 1:Nboot) {
                 ageModM$coefficients[1] %>% unname(),
                 ageModF$coefficients[1] %>% unname())
   
-  offModM  <- glm(sprTotalOffspring[which(sprSexHolder == "Male")] ~ sprStore[i, which(sprSexHolder == "Male")] %>% 
+  offModM  <- glm(sprTotalOffspring[which(sprSexHolder == "Male" & sprCohortHolder <= 2007)] ~ 
+                    sprStore[i, which(sprSexHolder == "Male" & sprCohortHolder <= 2007)] %>% 
                     unlist() %>% unname(),
                   family = poisson)
-  offModF  <- glm(sprTotalOffspring[which(sprSexHolder == "Female")] ~ sprStore[i, which(sprSexHolder == "Female")] %>% 
+  offModF  <- glm(sprTotalOffspring[which(sprSexHolder == "Female" & sprCohortHolder <= 2007)] ~ 
+                    sprStore[i, which(sprSexHolder == "Female" & sprCohortHolder <= 2007)] %>% 
                     unlist() %>% unname(),
                   family = poisson)
   
@@ -326,10 +409,12 @@ for (i in 1:Nboot) {
   
   # Next, summer:
   
-  ageModM  <- glm(sumMaxAge[which(sumSexHolder == "Male")] ~ sumStore[i, which(sumSexHolder == "Male")] %>% 
+  ageModM  <- glm(sumMaxAge[which(sumSexHolder == "Male" & sumLastCapture <= 2017)] ~ 
+                    sumStore[i, which(sumSexHolder == "Male" & sumLastCapture <= 2017)] %>% 
                     unlist() %>% unname(),
                   family = poisson)
-  ageModF  <- glm(sumMaxAge[which(sumSexHolder == "Female")] ~ sumStore[i, which(sumSexHolder == "Female")] %>% 
+  ageModF  <- glm(sumMaxAge[which(sumSexHolder == "Female" & sumLastCapture <= 2017)] ~ 
+                    sumStore[i, which(sumSexHolder == "Female" & sumLastCapture <= 2017)] %>% 
                     unlist() %>% unname(),
                   family = poisson)
   
@@ -340,10 +425,12 @@ for (i in 1:Nboot) {
                 ageModM$coefficients[1] %>% unname(),
                 ageModF$coefficients[1] %>% unname())
   
-  offModM  <- glm(sumTotalOffspring[which(sumSexHolder == "Male")] ~ sumStore[i, which(sumSexHolder == "Male")] %>% 
+  offModM  <- glm(sumTotalOffspring[which(sumSexHolder == "Male" & sumCohortHolder <= 2007)] ~ 
+                    sumStore[i, which(sumSexHolder == "Male" & sumCohortHolder <= 2007)] %>% 
                     unlist() %>% unname(),
                   family = poisson)
-  offModF  <- glm(sumTotalOffspring[which(sumSexHolder == "Female")] ~ sumStore[i, which(sumSexHolder == "Female")] %>% 
+  offModF  <- glm(sumTotalOffspring[which(sumSexHolder == "Female" & sumCohortHolder <= 2007)] ~ 
+                    sumStore[i, which(sumSexHolder == "Female" & sumCohortHolder <= 2007)] %>% 
                     unlist() %>% unname(),
                   family = poisson)
   
@@ -359,10 +446,12 @@ for (i in 1:Nboot) {
   
   # Finally, autumn:
   
-  ageModM  <- glm(autMaxAge[which(autSexHolder == "Male")] ~ autStore[i, which(autSexHolder == "Male")] %>% 
+  ageModM  <- glm(autMaxAge[which(autSexHolder == "Male" & autLastCapture <= 2017)] ~ 
+                    autStore[i, which(autSexHolder == "Male" & autLastCapture <= 2017)] %>% 
                     unlist() %>% unname(),
                   family = poisson)
-  ageModF  <- glm(autMaxAge[which(autSexHolder == "Female")] ~ autStore[i, which(autSexHolder == "Female")] %>% 
+  ageModF  <- glm(autMaxAge[which(autSexHolder == "Female" & autLastCapture <= 2017)] ~ 
+                    autStore[i, which(autSexHolder == "Female" & autLastCapture <= 2017)] %>% 
                     unlist() %>% unname(),
                   family = poisson)
   
@@ -373,10 +462,12 @@ for (i in 1:Nboot) {
                 ageModM$coefficients[1] %>% unname(),
                 ageModF$coefficients[1] %>% unname())
   
-  offModM  <- glm(autTotalOffspring[which(autSexHolder == "Male")] ~ autStore[i, which(autSexHolder == "Male")] %>% 
+  offModM  <- glm(autTotalOffspring[which(autSexHolder == "Male" & autCohortHolder <= 2007)] ~ 
+                    autStore[i, which(autSexHolder == "Male" & autCohortHolder <= 2007)] %>% 
                     unlist() %>% unname(),
                   family = poisson)
-  offModF  <- glm(autTotalOffspring[which(autSexHolder == "Female")] ~ autStore[i, which(autSexHolder == "Female")] %>% 
+  offModF  <- glm(autTotalOffspring[which(autSexHolder == "Female" & autCohortHolder <= 2007)] ~ 
+                    autStore[i, which(autSexHolder == "Female" & autCohortHolder <= 2007)] %>% 
                     unlist() %>% unname(),
                   family = poisson)
   
