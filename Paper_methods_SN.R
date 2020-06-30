@@ -89,7 +89,7 @@ autumn$v.residual   <- getME(autumnMod$mer, "sigma")^2 #Residual variance
 ## Bootstrapping--will take forever; it's already run and saved--if you skip to below, it ##
 ## has code for reading the objects in                                                    ##
 
-Nboot    <- 1000
+Nboot    <- 200 # TODO for some tests 
 
 # Shinichi's adding second storage
 
@@ -99,14 +99,17 @@ names(iccStore) <- outcomes
 
 outcomes <- spring.random[[1]] %>% row.names()
 sprStore <- data.frame(matrix(NA, nrow = Nboot, ncol = length(outcomes)))
+sprStore2 <- data.frame(matrix(NA, nrow = Nboot, ncol = length(outcomes)))
 colnames(sprStore) <- outcomes
 
 outcomes <- summer.random[[1]] %>% row.names()
 sumStore <- data.frame(matrix(NA, nrow = Nboot, ncol = length(outcomes)))
+sumStore2 <-  data.frame(matrix(NA, nrow = Nboot, ncol = length(outcomes)))
 colnames(sumStore) <- outcomes
 
 outcomes <- autumn.random[[1]] %>% row.names()
 autStore <- data.frame(matrix(NA, nrow = Nboot, ncol = length(outcomes)))
+autStore2 <- data.frame(matrix(NA, nrow = Nboot, ncol = length(outcomes)))
 colnames(autStore) <- outcomes
 
 set.seed(9453278) #"WildCRU" in numpad
@@ -195,10 +198,39 @@ for (i in 1:Nboot) {
   sumStore[i,] <- ranef(summerBootMod2$mer, condVar = TRUE)[[1]][,1]
   autStore[i,] <- ranef(autumnBootMod2$mer, condVar = TRUE)[[1]][,1]
   
+  # fixing random effects
+  sprStore2[i,] <- ranef(springBootMod$mer, condVar = TRUE)[[1]][,1]
+  sumStore2[i,] <- ranef(summerBootMod$mer, condVar = TRUE)[[1]][,1]
+  autStore2[i,] <- ranef(autumnBootMod$mer, condVar = TRUE)[[1]][,1]
+  
   if (i %% 25 == 0) {
     print(paste(100*i/Nboot %>% round(2), "% done.", sep = ""))
   }
 }
+
+########################
+# Shinichi's addition
+#######################
+
+# mean of indiviudals ranodm effects and it's standard error
+spr_mean <- sprStore %>% map_dbl(mean) 
+spr_mean2 <- sprStore2 %>% map_dbl(mean) 
+
+spr_se <- sprStore %>% map_dbl(sd) 
+spr_se2 <- sprStore2 %>% map_dbl(sd) 
+
+
+hist(spr_se) # I think this seems correct 
+hist(spr_se2) # as expected much larger
+# checking the model BLUPs and boostrapeed BLUPs mean match weell
+plot(spr_mean, spring.random[[1]][,1])
+cor(spr_mean, spring.random[[1]][,1]) # [1] 0.9419514
+
+# checking the correlaton - Yes, Julius is correct!
+plot(spr_mean2, spring.random[[1]][,1])
+cor(spr_mean2, spring.random[[1]][,1]) # [1] -0.04822124
+
+#######################
 
 
 #save(iccStore, sprStore, sumStore, autStore, file = "Bootstrapping output.RData")
