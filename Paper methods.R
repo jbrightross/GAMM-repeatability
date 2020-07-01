@@ -51,7 +51,7 @@ get_v_icc <- function(model, season) {
   
   v.fixed <- var(predict(model$mer, re.form = NA)) # v for fixed effects
   v.residual <- sigma^2
-  v.individual <-  unname(unlist(VarCorr(model$mer))["Individual"]) # sqrt taken out - it was SD ratehr than V
+  v.individual <-  unname(unlist(VarCorr(model$mer))["Individual"]) # sqrt taken out - it was SD rather than var
   v.sett <- unname(unlist(VarCorr(model$mer))["Sett"])
   
   icc1 <- v.individual/(v.residual + v.sett +  v.individual) # adjusted repeatability 1
@@ -249,6 +249,7 @@ sprTotalOffspring <- c()
 sprSexHolder      <- c()
 sprLastCapture    <- c()
 sprCohortHolder   <- c()
+sprTotalCaptures  <- c()
 
 for (i in 1:length(sprIndividuals)) {
   ind <- sprIndividuals[i]
@@ -279,6 +280,8 @@ for (i in 1:length(sprIndividuals)) {
   
   sprCohortHolder <- c(sprCohortHolder, as.character(indCohort))
   
+  sprTotalCaptures <- c(sprTotalCaptures, 
+                        length(which(springData$Individual == ind)))
 }
 
 sprLastCapture  <- as.numeric(sprLastCapture)
@@ -289,6 +292,7 @@ sumTotalOffspring <- c()
 sumSexHolder      <- c()
 sumLastCapture    <- c()
 sumCohortHolder   <- c()
+sumTotalCaptures  <- c()
 
 for (i in 1:length(sumIndividuals)) {
   ind <- sumIndividuals[i]
@@ -319,6 +323,8 @@ for (i in 1:length(sumIndividuals)) {
   
   sumCohortHolder <- c(sumCohortHolder, as.character(indCohort))
   
+  sumTotalCaptures <- c(sumTotalCaptures, 
+                        length(which(summerData$Individual == ind)))
 }
 
 sumLastCapture  <- as.numeric(sumLastCapture)
@@ -329,6 +335,7 @@ autTotalOffspring <- c()
 autSexHolder      <- c()
 autLastCapture    <- c()
 autCohortHolder   <- c()
+autTotalCaptures  <- c()
 
 for (i in 1:length(autIndividuals)) {
   ind <- autIndividuals[i]
@@ -358,6 +365,9 @@ for (i in 1:length(autIndividuals)) {
   } 
   
   autCohortHolder <- c(autCohortHolder, as.character(indCohort))
+  
+  autTotalCaptures <- c(autTotalCaptures, 
+                        length(which(autumnData$Individual == ind)))
 }
 
 autLastCapture  <- as.numeric(autLastCapture)
@@ -448,7 +458,7 @@ for (i in 1:Nboot) {
   sex    <- c(sex, "Male", "Female")
   season <- c(season, "Summer", "Summer")
   
-  # Finally, autumn:
+  # Autumn:
   
   ageModM  <- glm(autMaxAge[which(autSexHolder == "Male" & autLastCapture <= 2017)] ~ 
                     autStore[i, which(autSexHolder == "Male" & autLastCapture <= 2017)] %>% 
@@ -484,6 +494,8 @@ for (i in 1:Nboot) {
   
   sex    <- c(sex, "Male", "Female")
   season <- c(season, "Autumn", "Autumn")
+  
+  
   
 }
 
@@ -648,6 +660,88 @@ bootDict$sprMaleUpperMaxOff <- predictionFrame %>%
 bootDict$sprMaleUpperMinOff <- predictionFrame %>% 
   subset(Sex == "Male" & Season == "Spring" & Variable == "Total offspring" & bound == "Upper") %>%
   select(prediction) %>% pull() %>% min() %>% round(2)
+
+## Trying to model everything all together in one model, then pulling it apart:
+# 
+# coefficient <- c()
+# coefName    <- c()
+# model       <- c()
+# 
+# responseHolder <- data.frame(matrix(ncol = 10, nrow = 0))
+# names(responseHolder) <- c("Season", "maxAge", "totalOffspring", "Sex",
+#                            "X", "lastCapture", "Cohort", "OffPredictions",
+#                            "AgePredictions", "Group")
+# 
+# for (i in 1:Nboot) {
+#   
+#   maxAge <- c(sprMaxAge, sumMaxAge, autMaxAge)
+#   totalOffspring <- c(sprTotalOffspring, sumTotalOffspring, autTotalOffspring)
+#   sexHolder <- c(sprSexHolder, sumSexHolder, autSexHolder)
+#   ranefs <- c(sprStore[i,] %>% unlist() %>% unname(), 
+#               sumStore[i,] %>% unlist() %>% unname(),
+#               autStore[i,] %>% unlist() %>% unname())
+#   lastCapture <- c(sprLastCapture, sumLastCapture, autLastCapture)
+#   cohortHolder <- c(sprCohortHolder, sumCohortHolder, autCohortHolder)
+#   seasonHolder <- c(rep("Spring", length(sprMaxAge)),
+#                     rep("Summer", length(sumMaxAge)),
+#                     rep("Autumn", length(autMaxAge)))
+#   
+#   responseFrame <- data.frame(Season = seasonHolder,
+#                               maxAge, 
+#                               totalOffspring, 
+#                               Sex = sexHolder,
+#                               X = ranefs,
+#                               lastCapture, 
+#                               Cohort = cohortHolder)
+#   
+#   ageMod <- glm(maxAge ~ X + Sex + Season + Sex:X + Season:X + Sex:Season:X,
+#                 data = responseFrame %>% subset(lastCapture <= 2017),
+#                 family = poisson)
+#   
+#   offMod <- glm(totalOffspring ~ X + Sex + Season + Sex:X + Season:X + Sex:Season:X,
+#                 data = responseFrame %>% subset(Cohort <= 2007),
+#                 family = poisson)
+#   
+#   coefficient <- c(coefficient, 
+#                    ageMod$coefficients %>% unname(),
+#                    offMod$coefficients %>% unname())
+#   
+#   coefName <- c(coefName,
+#                 names(ageMod$coefficients),
+#                 names(offMod$coefficients))
+#   
+#   model <- c(model, 
+#              rep("maxAge", length(ageMod$coefficients)),
+#              rep("totalOffspring", length(offMod$coefficients)))
+#   
+#   responseFrame$OffPredictions <- NA
+#   responseFrame$AgePredictions <- NA
+#   
+#   responseFrame$OffPredictions[which(responseFrame$Cohort <= 2007)] <- predict(offMod, type = "response")
+#   responseFrame$AgePredictions[which(responseFrame$lastCapture <= 2017)] <- predict(ageMod, type = "response")
+#   
+#   responseFrame$Group <- i
+#   
+#   responseHolder <- rbind(responseHolder, responseFrame)
+#   
+# }
+# 
+# ggplot(responseHolder, aes(x = X, y = OffPredictions, group = Group)) + 
+#   geom_line(alpha = 0.1) + 
+#   facet_wrap(.~Sex*Season, ncol = 2)
+# 
+# newModelFrame <- data.frame(coefficient, coefName, model)
+# 
+# ggplot(newModelFrame, aes(x = coefName, y = coefficient, color = model)) + 
+#   geom_boxplot()
+# 
+# newCoefSummary <- newModelFrame %>%
+#   group_by(model, coefName) %>%
+#   mutate(lowerCoef = quantile(coefficient, 0.025),
+#          avgCoef = mean(coefficient),
+#          upperCoef = quantile(coefficient, 0.975)) %>%
+#   ungroup() %>%
+#   distinct(model, coefName, .keep_all = TRUE)
 
 ## Exporting stuff ##
 
