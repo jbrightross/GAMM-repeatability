@@ -19,6 +19,7 @@ library(dplyr)
 library(rptR)
 library(purrr)
 library(ggplot2)
+library(cowplot)
 
 load("Condition modelling output.RData")
 
@@ -514,28 +515,34 @@ maxEff <- max(c(spring.random[[1]][,1], summer.random[[1]][,1], autumn.random[[1
 pointsPerPrediction <- 10
 predictionData <- seq(minEff, maxEff, length.out = pointsPerPrediction)
 
-predictionFrame <- data.frame(matrix(nrow = pointsPerPrediction*nrow(modelFrame), 
-                                     ncol = ncol(modelFrame) + 4))
-names(predictionFrame) <- c("prediction", "group", "average", "bound", names(modelFrame))
+predictionFrame <- data.frame(matrix(nrow = 0, 
+                                     ncol = ncol(modelFrame) + 5))
+names(predictionFrame) <- c("prediction", "x", "group", "average", "bound", names(modelFrame))
 
 # First, we'll just get the prediction line for each set of bootstrapped values #
 
 for (i in 1:nrow(modelFrame)) {
-  response <- exp(modelFrame$Intercept[i] + predictionData*modelFrame$Coefficient[i])
+  
+  if (modelFrame$Coefficient[i] > 1 | modelFrame$Coefficient[i] < -0.25) {
+    tempPredictionData <- seq(minEff, maxEff, length.out = 4*pointsPerPrediction)
+  } else {
+    tempPredictionData <- seq(minEff, maxEff, length.out = pointsPerPrediction)
+  }
+  
+  response <- exp(modelFrame$Intercept[i] + tempPredictionData*modelFrame$Coefficient[i])
   
   temp <- data.frame(prediction  = response,
+                     x           = tempPredictionData,
                      group       = i,
                      average     = "No",
                      bound = "Neither")
   
   temp <- cbind(temp, 
-                do.call("rbind", replicate(pointsPerPrediction, 
+                do.call("rbind", replicate(length(tempPredictionData), 
                                            modelFrame[i,] %>% mutate_if(is.factor, as.character), 
                                            simplify = FALSE)))
   
-  posToInsert <- min(which(is.na(predictionFrame$prediction)))
-  
-  predictionFrame[posToInsert:(posToInsert + pointsPerPrediction - 1),] <- temp
+  predictionFrame <- rbind(predictionFrame, temp)
   
 }
 
@@ -553,15 +560,19 @@ coefSummary <- modelFrame %>% group_by(Season, Sex, Variable) %>%
 for (i in 1:nrow(coefSummary)) {
   # First, averages:
   
-  response <- exp(coefSummary$MeanInt[i] + predictionData*coefSummary$MeanCoef[i])
+  tempPredictionData <- seq(minEff, maxEff, length.out = 4*pointsPerPrediction)
+
+  
+  response <- exp(coefSummary$MeanInt[i] + tempPredictionData*coefSummary$MeanCoef[i])
   
   temp <- data.frame(prediction  = response,
+                     x           = tempPredictionData,
                      group       = i,
                      average     = "Yes",
                      bound       = "Neither")
   
   temp <- cbind(temp, 
-                data.frame(do.call("rbind", replicate(pointsPerPrediction, 
+                data.frame(do.call("rbind", replicate(length(tempPredictionData), 
                                            coefSummary[i,] %>% mutate_if(is.factor, as.character) %>% 
                                              select(Coefficient, Intercept, Sex, Variable, Season), 
                                            simplify = FALSE))))
@@ -570,15 +581,16 @@ for (i in 1:nrow(coefSummary)) {
   
   # Now, lower bound:
   
-  response <- exp(coefSummary$LowerInt[i] + predictionData*coefSummary$LowerCoef[i])
+  response <- exp(coefSummary$LowerInt[i] + tempPredictionData*coefSummary$LowerCoef[i])
   
   temp <- data.frame(prediction  = response,
+                     x           = tempPredictionData,
                      group       = i,
                      average     = "No",
                      bound       = "Lower")
   
   temp <- cbind(temp, 
-                data.frame(do.call("rbind", replicate(pointsPerPrediction, 
+                data.frame(do.call("rbind", replicate(length(tempPredictionData), 
                                                       coefSummary[i,] %>% 
                                                         mutate_if(is.factor, as.character) %>% 
                                                         select(Coefficient, Intercept, Sex, Variable, Season), 
@@ -588,15 +600,16 @@ for (i in 1:nrow(coefSummary)) {
   
   # Finally, upper bound:
   
-  response <- exp(coefSummary$HigherInt[i] + predictionData*coefSummary$HigherCoef[i])
+  response <- exp(coefSummary$HigherInt[i] + tempPredictionData*coefSummary$HigherCoef[i])
   
   temp <- data.frame(prediction  = response,
+                     x           = tempPredictionData,
                      group       = i,
                      average     = "No",
                      bound       = "Upper")
   
   temp <- cbind(temp, 
-                data.frame(do.call("rbind", replicate(pointsPerPrediction, 
+                data.frame(do.call("rbind", replicate(length(tempPredictionData), 
                                            coefSummary[i,] %>% 
                                              mutate_if(is.factor, as.character) %>% 
                                              select(Coefficient, Intercept, Sex, Variable, Season), 
@@ -609,7 +622,168 @@ for (i in 1:nrow(coefSummary)) {
 predictionFrame$average[which(predictionFrame$average == "1")] <- "No"
 predictionFrame$bound[which(predictionFrame$bound == "1")] <- "Neither"
 
-predictionFrame$x <- rep(predictionData, nrow(predictionFrame)/pointsPerPrediction)
+## Looking at the effects measured from the original model ##
+
+springOriginalRandom <- spring.random[[1]][,1]
+summerOriginalRandom <- summer.random[[1]][,1]
+autumnOriginalRandom <- autumn.random[[1]][,1]
+
+originalCoefficient <- c()
+originalP          <- c()
+originalCoefName    <- c()
+originalSex         <- c()
+originalVariable    <- c()
+originalSeason      <- c()
+
+offModOrgM <- glm(sprTotalOffspring[sprSexHolder == "Male" & sprCohortHolder <= 2007] ~ 
+                    springOriginalRandom[sprSexHolder == "Male" & sprCohortHolder <= 2007], 
+                  family = poisson)
+offModOrgF <- glm(sprTotalOffspring[sprSexHolder == "Female" & sprCohortHolder <= 2007] ~ 
+                    springOriginalRandom[sprSexHolder == "Female" & sprCohortHolder <= 2007], 
+                  family = poisson)
+
+originalCoefficient <- c(originalCoefficient, offModOrgM$coefficients, offModOrgF$coefficients)
+originalP           <- c(originalP, summary(offModOrgM)$coefficients[,4], summary(offModOrgF)$coefficients[,4])
+originalCoefName    <- c(originalCoefName, 
+                         rep(c("Intercept", "Slope"), 2))
+originalSex         <- c(originalSex, 
+                         rep("Male", length(offModOrgM$coefficients)),
+                         rep("Female", length(offModOrgF$coefficients)))
+originalVariable    <- c(originalVariable, 
+                         rep("Total offspring", length(offModOrgF$coefficients) + length(offModOrgM$coefficients)))
+originalSeason      <- c(originalSeason,
+                         rep("Spring", length(offModOrgF$coefficients) + length(offModOrgM$coefficients)))
+
+offModOrgM <- glm(sumTotalOffspring[sumSexHolder == "Male" & sumCohortHolder <= 2007] ~ 
+                    summerOriginalRandom[sumSexHolder == "Male" & sumCohortHolder <= 2007], 
+                  family = poisson)
+offModOrgF <- glm(sumTotalOffspring[sumSexHolder == "Female" & sumCohortHolder <= 2007] ~ 
+                    summerOriginalRandom[sumSexHolder == "Female" & sumCohortHolder <= 2007], 
+                  family = poisson)
+
+originalCoefficient <- c(originalCoefficient, offModOrgM$coefficients, offModOrgF$coefficients)
+originalP           <- c(originalP, summary(offModOrgM)$coefficients[,4], summary(offModOrgF)$coefficients[,4])
+originalCoefName    <- c(originalCoefName, 
+                         rep(c("Intercept", "Slope"), 2))
+originalSex         <- c(originalSex, 
+                         rep("Male", length(offModOrgM$coefficients)),
+                         rep("Female", length(offModOrgF$coefficients)))
+originalVariable    <- c(originalVariable, 
+                         rep("Total offspring", length(offModOrgF$coefficients) + length(offModOrgM$coefficients)))
+originalSeason      <- c(originalSeason,
+                         rep("Summer", length(offModOrgF$coefficients) + length(offModOrgM$coefficients)))
+
+offModOrgM <- glm(autTotalOffspring[autSexHolder == "Male" & autCohortHolder <= 2007] ~ 
+                    autumnOriginalRandom[autSexHolder == "Male" & autCohortHolder <= 2007], 
+                  family = poisson)
+offModOrgF <- glm(autTotalOffspring[autSexHolder == "Female" & autCohortHolder <= 2007] ~ 
+                    autumnOriginalRandom[autSexHolder == "Female" & autCohortHolder <= 2007], 
+                  family = poisson)
+
+originalCoefficient <- c(originalCoefficient, offModOrgM$coefficients, offModOrgF$coefficients)
+originalP           <- c(originalP, summary(offModOrgM)$coefficients[,4], summary(offModOrgF)$coefficients[,4])
+originalCoefName    <- c(originalCoefName, 
+                         rep(c("Intercept", "Slope"), 2))
+originalSex         <- c(originalSex, 
+                         rep("Male", length(offModOrgM$coefficients)),
+                         rep("Female", length(offModOrgF$coefficients)))
+originalVariable    <- c(originalVariable, 
+                         rep("Total offspring", length(offModOrgF$coefficients) + length(offModOrgM$coefficients)))
+originalSeason      <- c(originalSeason,
+                         rep("Autumn", length(offModOrgF$coefficients) + length(offModOrgM$coefficients)))
+
+
+originalFrame <- data.frame(originalSeason, originalVariable, originalSex, originalCoefName, originalCoefficient, originalP)
+originalFrame$originalP <- round(originalFrame$originalP, 4)
+
+
+## Trying the same thing but adding weights based on the inverse of the variance of a random effect ##
+
+springOriginalRandom <- spring.random[[1]][,1]
+summerOriginalRandom <- summer.random[[1]][,1]
+autumnOriginalRandom <- autumn.random[[1]][,1]
+
+springWeights <- 1/apply(sprStore, 2, var)
+summerWeights <- 1/apply(sumStore, 2, var)
+autumnWeights <- 1/apply(autStore, 2, var)
+
+originalCoefficient <- c()
+originalP          <- c()
+originalCoefName    <- c()
+originalSex         <- c()
+originalVariable    <- c()
+originalSeason      <- c()
+
+offModOrgM <- glm(sprTotalOffspring[sprSexHolder == "Male" & sprCohortHolder <= 2007] ~ 
+                    springOriginalRandom[sprSexHolder == "Male" & sprCohortHolder <= 2007], 
+                  family = poisson,
+                  weights = springWeights[sprSexHolder == "Male" & sprCohortHolder <= 2007])
+offModOrgF <- glm(sprTotalOffspring[sprSexHolder == "Female" & sprCohortHolder <= 2007] ~ 
+                    springOriginalRandom[sprSexHolder == "Female" & sprCohortHolder <= 2007], 
+                  family = poisson,
+                  weights = springWeights[sprSexHolder == "Female" & sprCohortHolder <= 2007])
+
+originalCoefficient <- c(originalCoefficient, offModOrgM$coefficients, offModOrgF$coefficients)
+originalP           <- c(originalP, summary(offModOrgM)$coefficients[,4], summary(offModOrgF)$coefficients[,4])
+originalCoefName    <- c(originalCoefName, 
+                         rep(c("Intercept", "Slope"), 2))
+originalSex         <- c(originalSex, 
+                         rep("Male", length(offModOrgM$coefficients)),
+                         rep("Female", length(offModOrgF$coefficients)))
+originalVariable    <- c(originalVariable, 
+                         rep("Total offspring", length(offModOrgF$coefficients) + length(offModOrgM$coefficients)))
+originalSeason      <- c(originalSeason,
+                         rep("Spring", length(offModOrgF$coefficients) + length(offModOrgM$coefficients)))
+
+offModOrgM <- glm(sumTotalOffspring[sumSexHolder == "Male" & sumCohortHolder <= 2007] ~ 
+                    summerOriginalRandom[sumSexHolder == "Male" & sumCohortHolder <= 2007], 
+                  family = poisson,
+                  weights = summerWeights[sumSexHolder == "Male" & sumCohortHolder <= 2007])
+offModOrgF <- glm(sumTotalOffspring[sumSexHolder == "Female" & sumCohortHolder <= 2007] ~ 
+                    summerOriginalRandom[sumSexHolder == "Female" & sumCohortHolder <= 2007], 
+                  family = poisson,
+                  weights = summerWeights[sumSexHolder == "Female" & sumCohortHolder <= 2007])
+
+originalCoefficient <- c(originalCoefficient, offModOrgM$coefficients, offModOrgF$coefficients)
+originalP           <- c(originalP, summary(offModOrgM)$coefficients[,4], summary(offModOrgF)$coefficients[,4])
+originalCoefName    <- c(originalCoefName, 
+                         rep(c("Intercept", "Slope"), 2))
+originalSex         <- c(originalSex, 
+                         rep("Male", length(offModOrgM$coefficients)),
+                         rep("Female", length(offModOrgF$coefficients)))
+originalVariable    <- c(originalVariable, 
+                         rep("Total offspring", length(offModOrgF$coefficients) + length(offModOrgM$coefficients)))
+originalSeason      <- c(originalSeason,
+                         rep("Summer", length(offModOrgF$coefficients) + length(offModOrgM$coefficients)))
+
+offModOrgM <- glm(autTotalOffspring[autSexHolder == "Male" & autCohortHolder <= 2007] ~ 
+                    autumnOriginalRandom[autSexHolder == "Male" & autCohortHolder <= 2007], 
+                  family = poisson,
+                  weights = autumnWeights[autSexHolder == "Male" & autCohortHolder <= 2007])
+offModOrgF <- glm(autTotalOffspring[autSexHolder == "Female" & autCohortHolder <= 2007] ~ 
+                    autumnOriginalRandom[autSexHolder == "Female" & autCohortHolder <= 2007], 
+                  family = poisson,
+                  weights = autumnWeights[autSexHolder == "Female" & autCohortHolder <= 2007])
+
+originalCoefficient <- c(originalCoefficient, offModOrgM$coefficients, offModOrgF$coefficients)
+originalP           <- c(originalP, summary(offModOrgM)$coefficients[,4], summary(offModOrgF)$coefficients[,4])
+originalCoefName    <- c(originalCoefName, 
+                         rep(c("Intercept", "Slope"), 2))
+originalSex         <- c(originalSex, 
+                         rep("Male", length(offModOrgM$coefficients)),
+                         rep("Female", length(offModOrgF$coefficients)))
+originalVariable    <- c(originalVariable, 
+                         rep("Total offspring", length(offModOrgF$coefficients) + length(offModOrgM$coefficients)))
+originalSeason      <- c(originalSeason,
+                         rep("Autumn", length(offModOrgF$coefficients) + length(offModOrgM$coefficients)))
+
+
+originalFrameWeighted <- data.frame(originalSeason, originalVariable, originalSex, originalCoefName, originalCoefficient, originalP)
+originalFrameWeighted$originalP <- round(originalFrameWeighted$originalP, 4)
+
+originalFrame %>% subset(originalCoefName == "Slope")
+originalFrameWeighted %>% subset(originalCoefName == "Slope")
+coefSummary %>% subset(Variable == "Total offspring")
 
 ## Pulling out metrics for reporting ##
 
@@ -660,6 +834,138 @@ bootDict$sprMaleUpperMaxOff <- predictionFrame %>%
 bootDict$sprMaleUpperMinOff <- predictionFrame %>% 
   subset(Sex == "Male" & Season == "Spring" & Variable == "Total offspring" & bound == "Upper") %>%
   select(prediction) %>% pull() %>% min() %>% round(2)
+
+bootDict$spring.off.n.male   <- sum(sprSexHolder == "Male" & sprCohortHolder <= 2007)
+bootDict$spring.off.n.female <- sum(sprSexHolder == "Female" & sprCohortHolder <= 2007)
+bootDict$summer.off.n.male   <- sum(sumSexHolder == "Male" & sumCohortHolder <= 2007)
+bootDict$summer.off.n.female <- sum(sumSexHolder == "Female" & sumCohortHolder <= 2007)
+bootDict$autumn.off.n.male   <- sum(autSexHolder == "Male" & autCohortHolder <= 2007)
+bootDict$autumn.off.n.female <- sum(autSexHolder == "Female" & autCohortHolder <= 2007)
+bootDict$spring.age.n.male   <- sum(sprSexHolder == "Male" & sprLastCapture <= 2017)
+bootDict$spring.age.n.female <- sum(sprSexHolder == "Female" & sprLastCapture <= 2017)
+bootDict$summer.age.n.male   <- sum(sumSexHolder == "Male" & sumLastCapture <= 2017)
+bootDict$summer.age.n.female <- sum(sumSexHolder == "Female" & sumLastCapture <= 2017)
+bootDict$autumn.age.n.male   <- sum(autSexHolder == "Male" & autLastCapture <= 2017)
+bootDict$autumn.age.n.female <- sum(autSexHolder == "Female" & autLastCapture <= 2017)
+
+## Making plots ##
+
+predictionFrame$Season <- factor(predictionFrame$Season, levels = c("Spring", "Summer", "Autumn"))
+
+malePredictionFrame   <- subset(predictionFrame, Sex == "Male")
+femalePredictionFrame <- subset(predictionFrame, Sex == "Female")
+
+maleColor   <- "#44AA99"
+femaleColor <- "#b37091"
+
+maleBootFig <- ggplot(malePredictionFrame %>% subset(Variable == "Total offspring" &
+                                                       average == "No" &
+                                                       bound == "Neither"), 
+                      aes(x = x,
+                          y = prediction,
+                          group = group,
+                          colour = Sex)) + 
+  geom_line(alpha = 0.1) + facet_wrap(.~Season, nrow = 3) +
+  geom_line(data = malePredictionFrame %>% subset(Variable == "Total offspring" & 
+                                                    average == "Yes"),
+            aes(colour = NULL),
+            size = 0.5) +  
+  geom_line(data = malePredictionFrame %>% subset(Variable == "Total offspring" & bound == "Lower"), 
+            aes(colour = NULL),
+            linetype = "dashed",
+            size = 0.5) + 
+  geom_line(data = malePredictionFrame %>% subset(Variable == "Total offspring" & bound == "Upper"), 
+            aes(colour = NULL),
+            linetype = "dashed",
+            size = 0.5) +
+  coord_cartesian(ylim=c(0, 8)) +
+  scale_color_manual(breaks = c("Male"), values = c(maleColor)) + 
+  guides(color = FALSE) + ylab(NULL) + xlab(NULL) +
+  theme_bw()
+
+femaleBootFig <- ggplot(femalePredictionFrame %>% subset(Variable == "Total offspring" &
+                                                         average == "No" &
+                                                         bound == "Neither"), 
+                        aes(x = x,
+                            y = prediction,
+                            group = group,
+                            colour = Sex)) + 
+  geom_line(alpha = 0.1) + facet_wrap(.~Season, nrow = 3) +
+  geom_line(data = femalePredictionFrame %>% subset(Variable == "Total offspring" & 
+                                                    average == "Yes"),
+            aes(colour = NULL),
+            size = 0.5) +  
+  geom_line(data = femalePredictionFrame %>% subset(Variable == "Total offspring" & bound == "Lower"), 
+            aes(colour = NULL),
+            linetype = "dashed",
+            size = 0.5) + 
+  geom_line(data = femalePredictionFrame %>% subset(Variable == "Total offspring" & bound == "Upper"), 
+            aes(colour = NULL),
+            linetype = "dashed",
+            size = 0.5) +
+  coord_cartesian(ylim=c(0, 8)) +
+  scale_color_manual(breaks = c("Female"), values = c(femaleColor)) + 
+  guides(color = FALSE) + ylab(NULL) + xlab(NULL) +
+  theme_bw()
+
+maleBootFigApp <- ggplot(malePredictionFrame %>% subset(Variable == "Max age" &
+                                                          average == "No" &
+                                                          bound == "Neither"), 
+                         aes(x = x,
+                             y = prediction,
+                             group = group,
+                             colour = Sex)) + 
+  geom_line(alpha = 0.1) + facet_wrap(.~Season, nrow = 3) +
+  geom_line(data = malePredictionFrame %>% subset(Variable == "Max age" & 
+                                                    average == "Yes"),
+            aes(colour = NULL),
+            size = 0.5) +  
+  geom_line(data = malePredictionFrame %>% subset(Variable == "Max age" & bound == "Lower"), 
+            aes(colour = NULL),
+            linetype = "dashed",
+            size = 0.5) + 
+  geom_line(data = malePredictionFrame %>% subset(Variable == "Max age" & bound == "Upper"), 
+            aes(colour = NULL),
+            linetype = "dashed",
+            size = 0.5) +
+  coord_cartesian(ylim=c(2, 11)) +
+  scale_color_manual(breaks = c("Male"), values = c(maleColor)) + 
+  guides(color = FALSE) + ylab(NULL) + xlab(NULL) +
+  theme_bw()
+
+femaleBootFigApp <- ggplot(femalePredictionFrame %>% subset(Variable == "Max age" &
+                                                              average == "No" &
+                                                              bound == "Neither"), 
+                           aes(x = x,
+                               y = prediction,
+                               group = group,
+                               colour = Sex)) + 
+  geom_line(alpha = 0.1) + facet_wrap(.~Season, nrow = 3) +
+  geom_line(data = femalePredictionFrame %>% subset(Variable == "Max age" & 
+                                                      average == "Yes"),
+            aes(colour = NULL),
+            size = 0.5) +  
+  geom_line(data = femalePredictionFrame %>% subset(Variable == "Max age" & bound == "Lower"), 
+            aes(colour = NULL),
+            linetype = "dashed",
+            size = 0.5) + 
+  geom_line(data = femalePredictionFrame %>% subset(Variable == "Max age" & bound == "Upper"), 
+            aes(colour = NULL),
+            linetype = "dashed",
+            size = 0.5) +
+  coord_cartesian(ylim=c(2, 11)) +
+  scale_color_manual(breaks = c("Female"), values = c(femaleColor)) + 
+  guides(color = FALSE) + ylab(NULL) + xlab(NULL) +
+  theme_bw()
+
+bootFigure <- plot_grid(maleBootFig, femaleBootFig,
+                        ncol = 2,
+                        align = "h")
+
+bootFigureApp <- plot_grid(maleBootFigApp, femaleBootFigApp,
+                           ncol = 2,
+                           align = "h")
+
 
 ## Trying to model everything all together in one model, then pulling it apart:
 # 
@@ -745,4 +1051,4 @@ bootDict$sprMaleUpperMinOff <- predictionFrame %>%
 
 ## Exporting stuff ##
 
-save(predictionFrame, coefSummary, sprStore, sumStore, autStore, bootDict, file = "Bootstrapping output.RData")
+save(predictionFrame, coefSummary, sprStore, sumStore, autStore, bootDict, bootFigure, bootFigureApp, file = "Bootstrapping output.RData")
