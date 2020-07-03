@@ -201,7 +201,6 @@ for (i in 1:Nboot) {
   }
 }
 
-
 #save(iccStore, sprStore, sumStore, autStore, file = "Bootstrapping output.RData")
 
 ## Now, getting summary statistics for repeatability ##
@@ -228,6 +227,26 @@ bootDict$summer.mean.icc <- iccStore %>%
 bootDict$autumn.mean.icc <- iccStore %>% 
   subset(season == "Autumn") %>% 
   select(icc1) %>% pull() %>% mean()
+
+bootDict$spring.upper.icc <- iccStore %>% 
+  subset(season == "Spring") %>% 
+  select(icc1) %>% pull() %>% quantile(0.025)
+bootDict$summer.upper.icc <- iccStore %>% 
+  subset(season == "Summer") %>% 
+  select(icc1) %>% pull() %>% quantile(0.025)
+bootDict$autumn.upper.icc <- iccStore %>% 
+  subset(season == "Autumn") %>% 
+  select(icc1) %>% pull() %>% quantile(0.025)
+
+bootDict$spring.lower.icc <- iccStore %>% 
+  subset(season == "Spring") %>% 
+  select(icc1) %>% pull() %>% quantile(0.975)
+bootDict$summer.lower.icc <- iccStore %>% 
+  subset(season == "Summer") %>% 
+  select(icc1) %>% pull() %>% quantile(0.975)
+bootDict$autumn.lower.icc <- iccStore %>% 
+  subset(season == "Autumn") %>% 
+  select(icc1) %>% pull() %>% quantile(0.975)
 
 bootDict$spring.org.icc <- get_v_icc(model = springMod, season = "Spring") %>% select(icc1)
 bootDict$summer.org.icc <- get_v_icc(model = summerMod, season = "Summer") %>% select(icc1)
@@ -1051,4 +1070,4 @@ bootFigureApp <- plot_grid(maleBootFigApp, femaleBootFigApp,
 
 ## Exporting stuff ##
 
-save(predictionFrame, coefSummary, sprStore, sumStore, autStore, bootDict, bootFigure, bootFigureApp, file = "Bootstrapping output.RData")
+save(predictionFrame, coefSummary, sprStore, sumStore, autStore, bootDict, bootFigure, bootFigureApp, file = "Bootstrapping final output.RData")
